@@ -1,0 +1,62 @@
+name: Pull code to host
+
+
+on:
+  push:
+    branches: ["**"]       
+  workflow_dispatch:        # "Run workflow" button; uses the branch you pick
+
+concurrency:
+  group: pull-code-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pull:
+    # Skip the run GitHub triggers when a branch is deleted
+    if: github.event_name != 'push' || github.event.deleted == false
+    # Add "training" here if you gave the runner that label
+    runs-on: [self-hosted, linux, training]
+    timeout-minutes: 15
+
+    steps:
+      - name: Sync branch into ~/ai-training/<branch>
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # feature/login -> feature_login (safe folder name)
+          SAFE_BRANCH="$(printf '%s' "$BRANCH" | tr -c 'A-Za-z0-9._-' '_')"
+
+          # "~" is the home of the user the runner service runs as
+          TARGET_DIR="$HOME/ai-training/$SAFE_BRANCH"
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
+
+          echo "Branch: $BRANCH"
+          echo "Folder: $TARGET_DIR"
+
+          if [ ! -d "$TARGET_DIR/.git" ]; then
+            if [ -e "$TARGET_DIR" ] && [ -n "$(ls -A "$TARGET_DIR" 2>/dev/null)" ]; then
+              echo "ERROR: $TARGET_DIR exists but is not a git repo. Move or delete it first."
+              exit 1
+            fi
+            echo "First time for this branch: cloning"
+            mkdir -p "$(dirname "$TARGET_DIR")"
+            git clone --branch "$BRANCH" "$REPO_URL" "$TARGET_DIR"
+          else
+            echo "Updating existing checkout"
+            cd "$TARGET_DIR"
+            git remote set-url origin "$REPO_URL"
+            git fetch --prune origin "$BRANCH"
+            # Makes tracked files identical to GitHub. Untracked files
+            # (datasets, model weights, local files) are left alone.
+            git reset --hard FETCH_HEAD
+          fi
+
+          cd "$TARGET_DIR"
+          echo
+          echo "Host now at commit: $(git rev-parse --short HEAD)"
+          git log -1 --pretty='%an: %s'
