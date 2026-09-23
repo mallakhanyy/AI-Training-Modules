@@ -1,7 +1,14 @@
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(ROOT_DIR))
+
+
 import asyncio
 import aio_pika
 from core.config import settings
-from shared.logger import logger
+from shared.logging.logger import logger
 from infrastructure.models.qwen_asr import QwenASR
 from infrastructure.messaging.rabbitmq_consumer import RabbitMQConsumer
 from infrastructure.messaging.rabbitmq_publisher import RabbitMQPublisher
